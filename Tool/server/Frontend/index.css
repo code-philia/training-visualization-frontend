@@ -321,6 +321,8 @@ pre.highlight {
     flex: 1;
     display: flex;
     flex-direction: column;
+    align-items: center;
+    justify-content: center;
     min-height: 0;
 }
 
@@ -342,4 +344,10 @@ pre.highlight {
     padding: 0.5em;
     box-sizing: content-box;
     overflow-y: auto;
+}
+
+.token-highlighted {
+    font-weight: bold;
+    color: red;
+    background-color: rgba(0, 255, 255, 0.3);
 }

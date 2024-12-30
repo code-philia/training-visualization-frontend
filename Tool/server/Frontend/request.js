@@ -15,7 +15,7 @@ function updateProjection(content_path, iteration, taskType) {
     fetch(`${window.location.href}updateProjection`, {
         method: 'POST',
         body: JSON.stringify({
-            "path": content_path, 
+            "path": content_path,
             "iteration": iteration,
             "resolution": 200,
             "vis_method": window.vueApp.visMethod,
@@ -38,7 +38,7 @@ function updateProjection(content_path, iteration, taskType) {
             window.vueApp.errorMessage =  res.errorMessage
           }
         }
-       
+
         if (taskType === 'Umap-Neighborhood') {
             // in the new specification, res.label_list should be all number, and color_list should be a list
             const formattedData = {
@@ -64,6 +64,13 @@ function updateProjection(content_path, iteration, taskType) {
             drawCanvas(formattedData);
             window.vueApp.currEpoch = iteration;
             window.vueApp.epochData = formattedData;
+
+            if (res.comment_tokens && res.comment_text && res.code_tokens && res.code_text) {
+                window.vueApp.commentText = res.comment_text;
+                window.vueApp.commentTokens = res.comment_tokens;
+                window.vueApp.codeText = res.code_text;
+                window.vueApp.codeTokens = res.code_tokens;
+            }
         } else {
           drawCanvas(res);
             window.vueApp.prediction_list = res.prediction_list
@@ -129,7 +136,7 @@ function updateProjection(content_path, iteration, taskType) {
             console.log("error", error);
           });
     }
-   
+
 }
 
 function updateContraProjection(content_path, iteration, taskType, flag) {
@@ -139,7 +146,7 @@ function updateContraProjection(content_path, iteration, taskType, flag) {
     fetch(`${window.location.href}/updateProjection`, {
         method: 'POST',
         body: JSON.stringify({
-            "path": content_path, 
+            "path": content_path,
             "iteration": iteration,
             "resolution": 200,
             "vis_method":  window.vueApp[specifiedVisMethod],
@@ -154,12 +161,12 @@ function updateContraProjection(content_path, iteration, taskType, flag) {
     })
     .then(response => response.json())
     .then(res => {
-        currId = 'container_tar'    
-        alert_prefix = "right:\n"  
+        currId = 'container_tar'
+        alert_prefix = "right:\n"
         if (flag == 'ref') {
             currId = 'container_ref'
-            alert_prefix = "left:\n" 
-        } 
+            alert_prefix = "left:\n"
+        }
         if (res.errorMessage != "") {
           let specifiedErrorMessage = makeSpecifiedVariableName('errorMessage', flag)
           if (window.vueApp[specifiedErrorMessage]) {
@@ -169,7 +176,7 @@ function updateContraProjection(content_path, iteration, taskType, flag) {
             window.vueApp[specifiedErrorMessage] = alert_prefix + res.errorMessage
           }
         }
-       
+
         drawCanvas(res, currId,flag);
         let specifiedPredictionlist = makeSpecifiedVariableName('prediction_list', flag)
         let specifiedLabelList = makeSpecifiedVariableName('label_list', flag)
@@ -227,7 +234,7 @@ function getHighlightedPoints(task, flag) {
                 "selectedPointRight":selected_right
               }),
             };
-        
+
             fetch(`${window.location.href}/contraVisHighlightSingle`, requestOptions)
             .then(responses => {
 
@@ -257,17 +264,17 @@ function getHighlightedPoints(task, flag) {
                 window.vueApp.highlightAttributesTar.allHighlightedSet = new Set(data.contraVisChangeIndicesRight)
 
                 // console.log("blue", window.vueApp.highlightAttributesTar.highlightedPointsBlue)
-        
-        
+
+
                 if (selected_left != -1 && selected_right != -1) {
-                  
+
                   window.vueApp.highlightAttributesRef.boldIndices = [selected_left].concat([selected_right])
                   window.vueApp.highlightAttributesTar.boldIndices = [selected_right].concat([selected_left])
                 } else if (selected_left != -1 && selected_right == -1) {
-        
+
                   window.vueApp.highlightAttributesRef.boldIndices = [selected_left]
                   window.vueApp.highlightAttributesTar.boldIndices = [selected_left]
-              
+
                 } else if (selected_right != -1 && selected_left == -1) {
 
                   window.vueApp.highlightAttributesRef.boldIndices = [selected_right]
@@ -276,15 +283,15 @@ function getHighlightedPoints(task, flag) {
                   window.vueApp.highlightAttributesRef.boldIndices = []
                   window.vueApp.highlightAttributesTar.boldIndices = []
                 }
-        
-           
+
+
               } else if (selectedValue == "nearest neighbour") {
-        
+
                 var leftLeft = data.contraVisChangeIndicesLeftLeft;
                 var leftRight = data.contraVisChangeIndicesLeftRight;
                 var rightLeft = data.contraVisChangeIndicesRightLeft;
                 var rightRight = data.contraVisChangeIndicesRightRight;
-        
+
                 if (!leftLeft) {
                   leftLeft = []
                 }
@@ -321,8 +328,8 @@ function getHighlightedPoints(task, flag) {
                   window.vueApp.highlightAttributesTar.allHighlightedSet.clear()
                 }
                 window.vueApp.highlightAttributesTar.allHighlightedSet = new Set(rightRight.concat(rightLeft, greenRight))
-        
-        
+
+
                 var boldRight = []
                 var boldLeft = []
                 if (selected_left != -1) {
@@ -337,16 +344,16 @@ function getHighlightedPoints(task, flag) {
                 window.vueApp.highlightAttributesTar.boldIndices = window.vueApp.highlightAttributesRef.boldIndices
                 // console.log("boldleft", window.vueApp.highlightAttributesRef.boldIndices)
                 // console.log("boldright", window.vueApp.highlightAttributesTar.boldIndices)
-        
+
               } else {
                 resetHighlightAttributes()
               }
             })
             .catch(error => {
               console.error('Error during highlightCriticalChange fetch:', error);
-             
+
             });
-          
+
     } else if (task == "multi") {
             const requestOptions = {
               method: 'POST',
@@ -362,7 +369,7 @@ function getHighlightedPoints(task, flag) {
                 "content_path_right": window.vueApp.contentPathTar,
               }),
             };
-        
+
             fetch(`${window.location.href}/contraVisHighlight`, requestOptions)
             .then(response => {
               if (!response.ok) {
@@ -387,7 +394,7 @@ function getHighlightedPoints(task, flag) {
                 window.vueApp.highlightAttributesTar.allHighlightedSet = new Set(data.contraVisChangeIndices)
 
                 // console.log("requestRef", window.vueApp.highlightAttributesRef.allHighlightedSet)
-                // console.log("requestTar", window.vueApp.highlightAttributesTar.allHighlightedSet)        
+                // console.log("requestTar", window.vueApp.highlightAttributesTar.allHighlightedSet)
             })
             .catch(error => {
               console.error('Error during highlightCriticalChange fetch:', error);
@@ -408,7 +415,7 @@ function getHighlightedPoints(task, flag) {
           "content_path": window.vueApp[specifiedContentPath],
         }),
       };
-  
+
       fetch(`${window.location.href}/getVisualizationError`, requestOptions)
       .then(response => {
         if (!response.ok) {
@@ -494,10 +501,10 @@ function indexSearch(query, switchOn) {
   })
   .then(response => response.json())
   .then(res => {
-      window.vueApp.query_result = res.result   
-      // console.log(res.result);  
-      // console.log(window.vueApp.query_result); 
-      // console.log(typeof(window.vueApp.query_result)); 
+      window.vueApp.query_result = res.result
+      // console.log(res.result);
+      // console.log(window.vueApp.query_result);
+      // console.log(typeof(window.vueApp.query_result));
       // updateSizes()
       // console.log(switchOn)
       if (switchOn) {
@@ -555,9 +562,9 @@ function reloadColor(flag) {
 
             // If for some reason the color attribute does not exist, add it
         window.vueApp[specifiedPointsMesh].geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    
+
         window.vueApp[specifiedOriginalSettings].originalColors = Array.from(window.vueApp[specifiedPointsMesh].geometry.getAttribute('color').array);
-        window.vueApp[specifiedPointsMesh].geometry.getAttribute('color').needsUpdate = true; 
+        window.vueApp[specifiedPointsMesh].geometry.getAttribute('color').needsUpdate = true;
     }
       colors = []
       // console.log("originalColors",window.vueApp[specifiedOriginalSettings].originalColors )
@@ -613,14 +620,14 @@ function contrastLoadColor(flag) {
           window.vueApp.pointsMeshRef.geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
           window.vueApp.originalSettingsRef.originalColors = Array.from(window.vueApp.pointsMeshRef.geometry.getAttribute('color').array);
           console.log("refcolor",window.vueApp.originalSettingsRef.originalColors )
-          window.vueApp.pointsMeshRef.geometry.getAttribute('color').needsUpdate = true; 
+          window.vueApp.pointsMeshRef.geometry.getAttribute('color').needsUpdate = true;
       }
       if (window.vueApp.pointsMeshTar.geometry) {
         // If for some reason the color attribute does not exist, add it
         window.vueApp.pointsMeshTar.geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
         window.vueApp.originalSettingsTar.originalColors = Array.from(window.vueApp.pointsMeshTar.geometry.getAttribute('color').array);
         console.log("tarcolor",   window.vueApp.originalSettingsTar.originalColors)
-        window.vueApp.pointsMeshTar.geometry.getAttribute('color').needsUpdate = true; 
+        window.vueApp.pointsMeshTar.geometry.getAttribute('color').needsUpdate = true;
      }
       colors = []
       // reset other attributes
@@ -648,7 +655,7 @@ function contrastIndexSearch(query, switchOn) {
   })
   .then(response => response.json())
   .then(res => {
-      window.vueApp.query_result = res.result   
+      window.vueApp.query_result = res.result
       // if (switchOn) {
       //   contrastUpdateSizes()
       // } else {
@@ -669,9 +676,9 @@ function queryMissSearch(query,contentPathRef,currEpochRef,contentPathTar,currEp
   fetch(`queryMissSearch`, {
       method: 'POST',
       body: JSON.stringify({
-          "refpath": contentPathRef, 
+          "refpath": contentPathRef,
           "refiteration": currEpochRef,
-          "tarpath": contentPathTar, 
+          "tarpath": contentPathTar,
           "tariteration": currEpochTar,
           "query": {
               key: query.key,
@@ -684,7 +691,7 @@ function queryMissSearch(query,contentPathRef,currEpochRef,contentPathTar,currEp
   })
   .then(response => response.json())
   .then(res => {
-      window.vueApp.filter_index = res.result   
+      window.vueApp.filter_index = res.result
   })
   .catch(error => {
       console.error('Error fetching data:', error);
@@ -702,7 +709,7 @@ function loadVectorDB(content_path, iteration) {
     fetch(`${window.location.href}loadVectorDB`, {
         method: 'POST',
         body: JSON.stringify({
-            "path": content_path, 
+            "path": content_path,
             "iteration": iteration,
         }),
         headers: headers,
@@ -728,7 +735,7 @@ function contrastloadVectorDBCode(content_path, iteration) {
   fetch(`${window.location.href}loadVectorDBCode`, {
       method: 'POST',
       body: JSON.stringify({
-          "path": content_path, 
+          "path": content_path,
           "iteration": iteration,
       }),
       headers: headers,
@@ -754,7 +761,7 @@ function contrastloadVectorDBNl(content_path, iteration) {
   fetch(`${window.location.href}loadVectorDBNl`, {
       method: 'POST',
       body: JSON.stringify({
-          "path": content_path, 
+          "path": content_path,
           "iteration": iteration,
       }),
       headers: headers,
@@ -780,7 +787,7 @@ function updateCustomProjection(content_path, custom_path, iteration, taskType) 
   fetch(`${window.location.href}updateCustomProjection`, {
       method: 'POST',
       body: JSON.stringify({
-          "path": content_path, 
+          "path": content_path,
           "cus_path": custom_path,
           "iteration": iteration,
           "resolution": 200,
@@ -827,7 +834,7 @@ function highlightContraProjection(content_path, iteration, taskType, flag) {
   fetch(`highlightContraProjection`, {
       method: 'POST',
       body: JSON.stringify({
-          "path": content_path, 
+          "path": content_path,
           "iteration": iteration,
           "resolution": 200,
           "vis_method":  window.vueApp[specifiedVisMethod],
@@ -842,12 +849,12 @@ function highlightContraProjection(content_path, iteration, taskType, flag) {
   })
   .then(response => response.json())
   .then(res => {
-      currId = 'container_tar'    
-      alert_prefix = "right:\n"  
+      currId = 'container_tar'
+      alert_prefix = "right:\n"
       if (flag == 'ref') {
           currId = 'container_ref'
-          alert_prefix = "left:\n" 
-      } 
+          alert_prefix = "left:\n"
+      }
       let specifiedErrorMessage = makeSpecifiedVariableName('errorMessage', flag)
       if (window.vueApp[specifiedErrorMessage]) {
         window.vueApp[specifiedErrorMessage] = alert_prefix + res.errorMessage
@@ -887,9 +894,9 @@ function addNewLbel(labeling,contentPathRef,currEpochRef,contentPathTar,currEpoc
   fetch(`addNewLbel`, {
       method: 'POST',
       body: JSON.stringify({
-          "refpath": contentPathRef, 
+          "refpath": contentPathRef,
           "refiteration": currEpochRef,
-          "tarpath": contentPathTar, 
+          "tarpath": contentPathTar,
           "tariteration": currEpochTar,
           "labeling": {
               value: labeling.value,
@@ -930,7 +937,7 @@ function updateCustomProjection(content_path, custom_path, iteration, taskType) 
   fetch(`${window.location.href}updateCustomProjection`, {
       method: 'POST',
       body: JSON.stringify({
-          "path": content_path, 
+          "path": content_path,
           "cus_path": custom_path,
           "iteration": iteration,
           "resolution": 200,
@@ -977,7 +984,7 @@ function highlightContraProjection(content_path, iteration, taskType, flag) {
   fetch(`highlightContraProjection`, {
       method: 'POST',
       body: JSON.stringify({
-          "path": content_path, 
+          "path": content_path,
           "iteration": iteration,
           "resolution": 200,
           "vis_method":  window.vueApp[specifiedVisMethod],
@@ -992,12 +999,12 @@ function highlightContraProjection(content_path, iteration, taskType, flag) {
   })
   .then(response => response.json())
   .then(res => {
-      currId = 'container_tar'    
-      alert_prefix = "right:\n"  
+      currId = 'container_tar'
+      alert_prefix = "right:\n"
       if (flag == 'ref') {
           currId = 'container_ref'
-          alert_prefix = "left:\n" 
-      } 
+          alert_prefix = "left:\n"
+      }
       let specifiedErrorMessage = makeSpecifiedVariableName('errorMessage', flag)
       if (window.vueApp[specifiedErrorMessage]) {
         window.vueApp[specifiedErrorMessage] = alert_prefix + res.errorMessage
@@ -1037,9 +1044,9 @@ function addNewLbel(labeling,contentPathRef,currEpochRef,contentPathTar,currEpoc
   fetch(`addNewLbel`, {
       method: 'POST',
       body: JSON.stringify({
-          "refpath": contentPathRef, 
+          "refpath": contentPathRef,
           "refiteration": currEpochRef,
-          "tarpath": contentPathTar, 
+          "tarpath": contentPathTar,
           "tariteration": currEpochTar,
           "labeling": {
               value: labeling.value,

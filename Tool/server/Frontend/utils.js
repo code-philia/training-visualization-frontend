@@ -244,21 +244,41 @@ function updateLabelPosition(flag, pointPosition, pointIndex, labelType, isDispl
 
   }
 }
-function updateCurrHoverIndex(event, index, isDisplay, flag) {
+function updateCurrHoverIndex(event, index, isDisplay, flag, pos) {
+    if (!(event || pos)) return;
+
   let specifiedHoverLabel = makeSpecifiedVariableName('hoverLabel', flag)
   const hoverLabel = document.getElementById(specifiedHoverLabel);
-  if (isDisplay) {
+  if (isDisplay && event) {
     hoverLabel.style.left = (event.clientX + 5) + 'px';
     hoverLabel.style.top = (event.clientY - 20) + 'px';
     hoverLabel.style.display = 'block';
   } else {
+    if (window.vueApp.curIndex !== index) {
+      window.vueApp.curIndex = index;
+    }
+
     if (index !=null) {
-      let specifiedHoverIndex = makeSpecifiedVariableName('hoverIndex', flag)
+      let specifiedHoverIndex = makeSpecifiedVariableName('hoverIndex', flag);
       window.vueApp[specifiedHoverIndex] = index;
       hoverLabel.textContent = `${index}`;
-      hoverLabel.style.left = (event.clientX + 5) + 'px';
-      hoverLabel.style.top = (event.clientY - 20) + 'px';
-      hoverLabel.style.display = 'block';
+
+    let shouldUseFixedPosition = false;
+    if (pos) {
+        const [x, y] = pos;
+        if ((!event) || (Math.abs(event.clientX - x) > 30 || Math.abs(event.clientY - y) > 30)) {
+            shouldUseFixedPosition = true;
+            hoverLabel.style.left = (x + 5) + 'px';
+            hoverLabel.style.top = (y - 20) + 'px';
+        }
+    }
+
+    if (event && !shouldUseFixedPosition) {
+        hoverLabel.style.left = (event.clientX + 5) + 'px';
+        hoverLabel.style.top = (event.clientY - 20) + 'px';
+    }
+
+    hoverLabel.style.display = 'block';
 
     } else {
       if (hoverLabel) {
@@ -339,7 +359,6 @@ function makeSpecifiedVariableName(string, flag) {
 
 
 function drawTimeline(res, flag) {
-  console.log('res', res);
   // this.d3loader()
 
   const d3 = window.d3;
@@ -743,4 +762,160 @@ function resetHighlightAttributes() {
 
   window.vueApp.highlightAttributesRef.boldIndices = []
   window.vueApp.highlightAttributesTar.boldIndices = []
+}
+
+function generateHighlightedCode(codeElement, originalText, tokens, groupedTokenIndices) {
+    originalText = removeDocstrings(originalText);
+
+    codeElement.innerHTML = "";
+
+    // const tokenToLabel = new Map();
+    // groupedTokenIndices.forEach((group, groupIndex) => {
+    //     group.forEach(index => {
+    //         tokenToLabel.set(index, groupIndex);
+    //     });
+    // });
+
+    let pos = 0;
+
+    const flush = (nextPos, length, tokenIndex) => {
+        if (nextPos > pos) {
+            const text = originalText.slice(pos, nextPos);
+            codeElement.appendChild(document.createTextNode(text));
+        }
+        pos = nextPos;
+
+        if (tokenIndex >= 0) {
+            const tokenInText = originalText.slice(pos, pos + length);
+            const span = document.createElement("span");
+
+            span.classList.add(`token-${tokenIndex}`);
+
+            // const labelNumber = tokenToLabel.get(tokenIndex);
+            // if (labelNumber !== undefined) {
+            //     span.classList.add(`label-${labelNumber}`);
+            // }
+
+            span.textContent = tokenInText;
+            codeElement.appendChild(span);
+
+            pos += length;
+        }
+    };
+
+    let indexForGroupTokens = 0;
+
+    tokens.forEach((token, i) => {
+        if (isSpecialToken(token)) return;
+
+        token = token.replace('\u0120', '');
+
+        const commentEnd = findCommentEnd(originalText, pos);
+
+        const nextPos = originalText.indexOf(token, commentEnd);
+        if (nextPos >= 0) {
+            flush(nextPos, token.length, indexForGroupTokens);
+        } else {
+            return;
+        }
+
+        indexForGroupTokens += 1;
+    });
+
+    flush(originalText.length, 0, -1);
+
+    return codeElement;
+}
+
+// all codeElements use the same highlight token function, to reduce num of copy of this function in RAM?
+function highlightToken(el) {
+    el.classList.add("token-highlighted");
+}
+
+function unhighlightToken(el) {
+    el.classList.remove("token-highlighted");
+}
+
+function registerCodeTokenInteraction(codeElement, onRevealToken, onWatchHighlightSpecificToken) {
+    const tokens = codeElement.querySelectorAll('[class^="token-"]');
+    const tokensToHighlight = new Map();
+
+    const eventsToRemove = [];
+
+    tokens.forEach(token => {
+        const tokenIdClass = Array.from(token.classList).find(c => c.startsWith('token-'));
+        if (tokenIdClass === undefined) return;
+
+        const tokenId = parseInt(tokenIdClass.split('-')[1]);
+        tokensToHighlight.set(tokenId, token);
+
+        const l1 = token.addEventListener("mouseover", e => {
+            onRevealToken(tokenId);
+        });
+        eventsToRemove.push([token, 'mouseover', l1]);
+
+        const l2 = token.addEventListener("mouseleave", () => {
+            onRevealToken(null);
+        });
+        eventsToRemove.push([token, 'mouseleave', l2]);
+    });
+
+    onWatchHighlightSpecificToken((newVal) => {
+        tokensToHighlight.forEach(unhighlightToken);
+        if (newVal !== null) {
+            const token = tokensToHighlight.get(newVal);
+            token && highlightToken(token);
+        }
+    });
+
+    return () => {
+        eventsToRemove.forEach(([el, type, listener]) => {
+            el.removeEventListener(type, listener);
+        });
+    }
+}
+
+function isSpecialToken(token) {
+    return token.startsWith('<') && token.endsWith('>');
+}
+
+function removeDocstrings(code) {
+    code = code.replace(/""".*?"""/gs, '');
+    code = code.replace(/'''.*?'''/gs, '');
+    return code;
+}
+
+function findCommentEnd(s, pos) {
+    let i = pos;
+
+    while (i < s.length && /\s/.test(s[i])) {
+        i++;
+    }
+
+    if (s[i] === '#') {
+        while (i < s.length && s[i] !== '\n') {
+            i++;
+        }
+    }
+
+    return i;
+}
+
+function worldPositionToScreenPosition(worldPosition, camera, canvasRect) {
+    const [x, y] = worldPositionToClipPosition(worldPosition, camera);
+    return [(x + 1) / 2 * canvasRect.width + canvasRect.left, (-y + 1) / 2 * canvasRect.height + canvasRect.top];
+}
+
+function worldPositionToClipPosition(worldPosition, camera) {
+    const [x, y] = worldPosition;
+    const v4 = new THREE.Vector4(x, y, 0, 1.0);
+
+    camera.updateMatrixWorld(); // prevent wrongly update sprites after re-clicking load visualization result
+
+    const transformed = v4
+        .applyMatrix4(camera.matrixWorldInverse)
+        .applyMatrix4(camera.projectionMatrix)
+        .divideScalar(v4.w);
+
+    return [transformed.x, transformed.y];
 }

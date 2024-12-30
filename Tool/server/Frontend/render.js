@@ -22,12 +22,96 @@ let previousMousePosition = {
 };
 let lockIndex = false;
 
+const lineTwoPoints = (ctx, p1, p2) => {
+    let points = [];
+    points.push(new THREE.Vector3(p1.x, p1.y, p1.z));
+    points.push(new THREE.Vector3(p2.x, p2.y, p2.z));
+    let geometry = new THREE.BufferGeometry().setFromPoints(points);
+    ctx.scene.hoverLine = new THREE.Line(geometry, ctx.lineMaterial);
+    lines.push(ctx.scene.hoverLine);
+    ctx.scene.add(ctx.scene.hoverLine);
+};
+
+const removeAllLines = (ctx, lines) => {
+    lines.forEach(line => {
+        ctx.scene.remove(line);
+        line.geometry.dispose();
+    });
+    lines.length = 0;
+}
+
+const setSizeAndAlpha = (index, sizeArr, alphaArr, isEmphasize = false) => {
+    sizeArr[index] = HOVER_SIZE;
+    if (isEmphasize) {
+        alphaArr[index] = SELECTED_ALPHA;
+    }
+}
+
+const revealNeighborPoints = (ctx, index, relArr, sizeArr, alphaArr, posArr, isEmphasize = false) => {
+    relArr[index].forEach(neighbor => {
+        setSizeAndAlpha(neighbor, sizeArr, alphaArr, isEmphasize);
+        lineTwoPoints(ctx, p3d(index, posArr), p3d(neighbor, posArr));
+    });
+};
+
+const revealPoint = (ctx, index, relArr, sizeArr, alphaArr, posArr, isEmphasize = false) => {
+    if (index !== null && index !== undefined) {
+        setSizeAndAlpha(index, sizeArr, alphaArr, isEmphasize);
+        if (relArr) {
+            revealNeighborPoints(ctx, index, relArr, sizeArr, alphaArr, posArr, isEmphasize);
+        }
+    }
+}
+
+const updateHoveredIndexSize = (ctx, hoveredIndex, selectedIndices, highlightAttributes, nnIndices) => {
+    const sizeArr = ctx.pointsMesh.geometry.attributes.size.array;
+    const posArr = ctx.pointsMesh.geometry.attributes.position;    // keep dimension
+    const alphaArr = ctx.pointsMesh.geometry.attributes.alpha.array;
+
+    // TODO Can incremental update here optimize the performance?
+    for (let i = 0; i < sizeArr.length; i++) {
+        sizeArr[i] = NORMAL_SIZE;
+    }
+    removeAllLines(ctx, ctx.lines);
+
+    // TODO This logic should not be put here. Just for temporary test.
+    // What points are revealed should be determined in 'model' but not 'vision'.
+    // Especially like locked index should be preserved somewhere else
+    let top_k = undefined;
+    if (ctx.vueApp.taskType === 'Umap-Neighborhood') {
+        const top_k_attr_name =
+            ctx.vueApp.neighborhoodRevealType === 'Intra-Type' ? 'intra_sim_top_k'
+            : ctx.vueApp.neighborhoodRevealType === 'Inter-Type' ? 'inter_sim_top_k'
+            : undefined;
+        if (top_k_attr_name) {
+            top_k = ctx.vueApp.epochData[top_k_attr_name];
+        } else if (this.vueApp.neighborhoodRevealType === 'Both') {
+            const zip = (arr1, arr2) => {
+                return arr1.map((k, i) => [...k, ...arr2[i]]);
+            }
+            top_k = zip(ctx.vueApp.epochData['intra_sim_top_k'], ctx.vueApp.epochData['inter_sim_top_k']);
+        }
+    }
+
+    revealPoint(ctx, hoveredIndex, top_k, sizeArr, alphaArr, posArr, false);
+    selectedIndices.forEach((index) => revealPoint(ctx, index, top_k, sizeArr, alphaArr, posArr, true));
+
+    ctx.pointsMesh.geometry.attributes.size.needsUpdate = true;        // TODO Is this a drawback of performance? We mark the whole array as needing update
+    ctx.pointsMesh.geometry.attributes.position.needsUpdate = true;
+    ctx.pointsMesh.geometry.attributes.alpha.needsUpdate = true;
+}
+
 class PlotCanvas {
     constructor(vueApp) {
         // bind attributes to a vue app
         this.vueApp = vueApp;
         this.eventListeners = [];
         this.animations = [];
+    }
+
+    getScreenPositionOfPoint(index) {
+        const vector = new THREE.Vector3().fromBufferAttribute(this.pointsMesh.geometry.attributes.position, index);
+        return worldPositionToScreenPosition(vector, this.camera, this.canvas.getBoundingClientRect());
     }
 
     // bind to a container, initiating a scene in it
@@ -54,7 +138,7 @@ class PlotCanvas {
         // const throwOnGLError = (err, funcName, args) => {
         //     throw WebGLDebugUtils.glEnumToString(err) + " was caused by call to: " + funcName;
         // };
-        
+
         // let gl = this.canvas.getContext('webgl');
         // gl = WebGLDebugUtils.makeDebugContext(gl, throwOnGLError, logAndValidate);
     }
@@ -448,7 +532,7 @@ class PlotCanvas {
                 gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
             }
         `;
-        
+
         const fragmentShader = `
             varying vec3 vColor;
             void main() {
@@ -482,6 +566,7 @@ class PlotCanvas {
         }
     }
 
+    // TODO this seems to be useless, functionality replaced by the next method
     __updateSelectedPoint() {
         if (this.vueApp.selectedIndex) {
             this.pointsMesh.geometry.attributes.size.array[this.vueApp.selectedIndex] = HOVER_SIZE;
@@ -490,6 +575,16 @@ class PlotCanvas {
             this.vueApp.selectedPointPosition = pointPosition;
             this.pointsMesh.geometry.attributes.size.needsUpdate = true;
         }
+    }
+
+    __updateLastHoveredIndex() {
+        let specifiedLastHoveredIndex = makeSpecifiedVariableName('curIndex', '');
+        let specifiedImageSrc = makeSpecifiedVariableName('imageSrc', '');
+        let specifiedSelectedIndex = makeSpecifiedVariableName('selectedIndex', '');
+        let specifiedHighlightAttributes = makeSpecifiedVariableName('highlightAttributes', '');
+
+        updateHoveredIndexSize(this, this.vueApp[specifiedLastHoveredIndex], this.vueApp[specifiedSelectedIndex],
+            this.vueApp[specifiedHighlightAttributes].visualizationError, this.vueApp.nnIndices, this.pointsMesh, this.vueApp);
     }
 
     __addHoverRevealingControl() {
@@ -503,89 +598,11 @@ class PlotCanvas {
             return { x, y, z };
         };
 
-        const lines = [];
-        let lineMaterial = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
-        
-        const lineTwoPoints = (p1, p2) => {
-            let points = [];
-            points.push(new THREE.Vector3(p1.x, p1.y, p1.z));
-            points.push(new THREE.Vector3(p2.x, p2.y, p2.z));
-            let geometry = new THREE.BufferGeometry().setFromPoints(points);
-            this.scene.hoverLine = new THREE.Line(geometry, lineMaterial);
-            lines.push(this.scene.hoverLine);
-            this.scene.add(this.scene.hoverLine);
-        };
+        this.lines = [];
+        this.lineMaterial = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
 
-        const removeAllLines = () => {
-            lines.forEach(line => {
-                this.scene.remove(line);
-                line.geometry.dispose();
-            });
-            lines.length = 0;
-        }
-
-        const setSizeAndAlpha = (index, sizeArr, alphaArr, isEmphasize = false) => {
-            sizeArr[index] = HOVER_SIZE;
-            if (isEmphasize) {
-                alphaArr[index] = SELECTED_ALPHA;
-            }
-        }
-
-        const revealNeighborPoints = (index, relArr, sizeArr, alphaArr, posArr, isEmphasize = false) => {
-            relArr[index].forEach(neighbor => {
-                setSizeAndAlpha(neighbor, sizeArr, alphaArr, isEmphasize);
-                lineTwoPoints(p3d(index, posArr), p3d(neighbor, posArr));
-            });
-        };
-
-        const revealPoint = (index, relArr, sizeArr, alphaArr, posArr, isEmphasize = false) => {
-            if (index !== null && index !== undefined) {
-                setSizeAndAlpha(index, sizeArr, alphaArr, isEmphasize);
-                if (relArr) {
-                    revealNeighborPoints(index, relArr, sizeArr, alphaArr, posArr, isEmphasize);
-                }
-            }
-        }
-
-        const updateHoveredIndexSize = (hoveredIndex, selectedIndices) => {
-            const sizeArr = this.pointsMesh.geometry.attributes.size.array;
-            const posArr = this.pointsMesh.geometry.attributes.position;    // keep dimension
-            const alphaArr = this.pointsMesh.geometry.attributes.alpha.array;
-
-            // TODO Can incremental update here optimize the performance?
-            for (let i = 0; i < sizeArr.length; i++) {
-                sizeArr[i] = NORMAL_SIZE;
-            }
-            removeAllLines();
-
-            // TODO This logic should not be put here. Just for temporary test.
-            // What points are revealed should be determined in 'model' but not 'vision'.
-            // Especially like locked index should be preserved somewhere else
-            let top_k = undefined;
-            if (this.vueApp.taskType === 'Umap-Neighborhood') {
-                const top_k_attr_name =
-                    this.vueApp.neighborhoodRevealType === 'Intra-Type' ? 'intra_sim_top_k'
-                    : this.vueApp.neighborhoodRevealType === 'Inter-Type' ? 'inter_sim_top_k'
-                    : undefined;
-                if (top_k_attr_name) {
-                    top_k = window.vueApp.epochData[top_k_attr_name];
-                } else if (this.vueApp.neighborhoodRevealType === 'Both') {
-                    const zip = (arr1, arr2) => {
-                        return arr1.map((k, i) => [...k, ...arr2[i]]);
-                    }
-                    top_k = zip(window.vueApp.epochData['intra_sim_top_k'], window.vueApp.epochData['inter_sim_top_k']);
-                }
-            }
-
-            revealPoint(hoveredIndex, top_k, sizeArr, alphaArr, posArr, false);
-            selectedIndices.forEach((index) => revealPoint(index, top_k, sizeArr, alphaArr, posArr, true));
-        }
-
+        // FIXME it's not a good practice to use function here, because always needs remapping
         function onMouseMove(event, isDown = false) {
-            this.vueApp.selectedIndex.forEach(index => {
-                this.pointsMesh.geometry.getAttribute('size').array[index] = SELECTED_SIZE;
-            });
-            this.pointsMesh.geometry.getAttribute('size').needsUpdate = true;
             // TODO consider adjusting the threshold reactive to monitor size and resolution
             raycaster.params.Points.threshold = 0.1 / this.camera.zoom; // 根据点的屏幕大小调整
             let rect = this.renderer.domElement.getBoundingClientRect();
@@ -594,10 +611,6 @@ class PlotCanvas {
 
             raycaster.setFromCamera(mouse, this.camera);
             let intersects = raycaster.intersectObject(this.pointsMesh);
-            let specifiedLastHoveredIndex = makeSpecifiedVariableName('lastHoveredIndex', '');
-            let specifiedImageSrc = makeSpecifiedVariableName('imageSrc', '');
-            let specifiedSelectedIndex = makeSpecifiedVariableName('selectedIndex', '');
-            let specifiedHighlightAttributes = makeSpecifiedVariableName('highlightAttributes', '');
 
             let index = null;
             if (intersects.length > 0 && checkVisibility(this.pointsMesh.geometry.attributes.alpha.array, intersects[0].index)) {
@@ -614,7 +627,6 @@ class PlotCanvas {
                     const filter_index = this.vueApp.filter_index.split(',');
                     index = filter_index[index];
                 }
-                this.vueApp.curIndex = index;
 
                 // This index is deem as hovered
 
@@ -632,19 +644,11 @@ class PlotCanvas {
                     }
                 }
             }
-            
-            this.vueApp[specifiedLastHoveredIndex] = index;
-            
-            const update = () => {
-                updateHoveredIndexSize(this.vueApp[specifiedLastHoveredIndex], this.vueApp[specifiedSelectedIndex],
-                    this.vueApp[specifiedHighlightAttributes].visualizationError, this.vueApp.nnIndices);
-            }
-            update();
-            this.lastDoUpdateRevealing = update;
 
-            this.pointsMesh.geometry.attributes.size.array[index] = HOVER_SIZE;
-            this.pointsMesh.geometry.attributes.size.needsUpdate = true;        // TODO Is this a drawback of performance? We mark the whole array as needing update
-            updateCurrHoverIndex(event, index, false, '');
+            this.__updateLastHoveredIndex();
+
+            this.lastDoUpdateRevealing = this.__updateLastHoveredIndex.bind(this);
+            updateCurrHoverIndex(event, index, false, '', this.getScreenPositionOfPoint(index));
 
             if ((index === null || index === undefined) && this.container.style.cursor !== 'move') {
                 this.container.style.cursor = 'default';
@@ -670,7 +674,8 @@ class PlotCanvas {
 
         this.__registerContainerEventListener('mousemove', (e) => { onMouseMove.call(this, e, false); });
         // FIXME click-to-lock logic was mixed into the logic of mousemove
-        this.__registerContainerEventListener('click', (e) => { onMouseMove.call(this, e, true); });    
+        this.__registerContainerEventListener('click', (e) => { onMouseMove.call(this, e, true); });
+        this.vueApp.$watch('curIndex', this.__updateLastHoveredIndex.bind(this));
     }
 
     __addDoubleClickLockingControl() {
@@ -712,7 +717,7 @@ class PlotCanvas {
 
                 this.vueApp.selectedPointPos.push({ 'x': vector.x, 'y': vector.y });
                 console.log("this.vueApp.selectedIndex after push", this.vueApp.selectedPointPos);
-                //   this.pointsMesh.geometry.attributes.size.array[this.vueApp.selectedIndex] = HOVER_SIZE; 
+                //   this.pointsMesh.geometry.attributes.size.array[this.vueApp.selectedIndex] = HOVER_SIZE;
                 this.vueApp.selectedIndex.forEach(index => {
                     this.pointsMesh.geometry.getAttribute('size').array[index] = SELECTED_SIZE;
                 });
@@ -737,7 +742,7 @@ class PlotCanvas {
             this.pointsMesh.geometry.attributes.alpha.array = updateShowingIndices(this.pointsMesh.geometry.attributes.alpha.array, this.vueApp[specifiedShowTraining], this.vueApp[specifiedTrainIndex], this.vueApp[specifiedPredictionFlipIndices]);
             this.pointsMesh.geometry.attributes.alpha.array = updateShowingIndices(this.pointsMesh.geometry.attributes.alpha.array, this.vueApp[specifiedShowTesting], this.vueApp[specifiedTestIndex], this.vueApp[specifiedPredictionFlipIndices]);
 
-            // update position z index to allow currDisplay indices show above 
+            // update position z index to allow currDisplay indices show above
             for (let i = 0; i < this.pointsMesh.geometry.attributes.alpha.array.length; i++) {
                 let zIndex = i * 3 + 2;
                 this.pointsMesh.geometry.attributes.position.array[zIndex] = this.pointsMesh.geometry.attributes.alpha.array[i] === 1 ? 0 : -1;
@@ -839,7 +844,7 @@ function drawCanvas(res) {
         // }
     if (window.vueApp.plotCanvas) {
         window.vueApp.plotCanvas.plotDataPoints(res, true);
-    } else { 
+    } else {
         let container = document.getElementById("container");
         while (container.firstChild) {
             container.removeChild(container.firstChild);
@@ -848,7 +853,7 @@ function drawCanvas(res) {
         plotCanvas.bindTo(container);
         plotCanvas.plotDataPoints(res);
         plotCanvas.render();
-    
+
         window.vueApp.plotCanvas = plotCanvas;
     }
 
@@ -906,7 +911,7 @@ function labelColor() {
         let b = bigint & 255;
         return [r, g, b];
     };
-    
+
     function changeLabelColor(label2Change, newColor) {
         const pointLabels = window.vueApp.label_list;
         for (let i = 0; i < pointLabels.length; i++) {
@@ -918,7 +923,7 @@ function labelColor() {
         }
         drawCanvas(window.vueApp.res)
     }
-    
+
     Object.keys(labels).forEach((key, index) => {
         const row = document.createElement('tr');
 

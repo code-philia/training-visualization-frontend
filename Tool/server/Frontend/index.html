@@ -299,21 +299,23 @@
             <el-tabs v-model="activeTab" class="footer-tabs">
                 <el-tab-pane label="Timeline" name="timeline">
                     <div style="display: flex; align-items: end;">
-                        <svg id="timeLinesvg"></svg>
+                        <svg id="timeLinesvg" width="0" height="0"></svg>
                         <button id="play-timeline-button" v-if="document.getElementById('timeLinesvg')?.classList?.contains('active')"
                             @mousedown="playTimeline = !playTimeline" :class="playTimeline ? 'pause' : 'play'"/>
                     </div>
                 </el-tab-pane><!--
                 --><el-tab-pane label="Tokens Overview" name="tokens-overview">
                     <div class="tokens-overview-content" v-if="codeTokens && codeText && commentTokens && commentText">
-                        <pre class="tokens-overview-pre">
+                        <pre class="tokens-overview-pre"
+                        v-element-mounted="rebindTokensOverviewBy(commentText, commentTokens, resolveCurrentIndexAndTokenIndexInGroup(0))">
                             <code>{{ commentText }}</code>
                         </pre>
-                        <pre class="tokens-overview-pre">
+                        <pre class="tokens-overview-pre"
+                        v-element-mounted="rebindTokensOverviewBy(codeText, codeTokens, resolveCurrentIndexAndTokenIndexInGroup(1))">
                             <code>{{ codeText }}</code>
                         </pre>
                     </div>
-                    <div v-else>
+                    <div v-else style="width: fit-content;">
                         No valid code and comment.
                     </div>
                 </el-tab-pane>
@@ -343,7 +345,6 @@
     </div>
 </body>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/livereload-js/3.1.0/livereload.min.js?host=localhost"></script>
 <script>
 
     window.vueApp = new Vue({
@@ -360,72 +361,12 @@
                 playTimeline: false,
                 playEvent: undefined,
 
-                activeTab: 'tokens-overview',
+                activeTab: 'timeline',
 
-                codeText: "def read_chunks(stm, size):\n    \"\"\" Reads exactly size bytes from stm and produces chunks\n\n    May call stm.read multiple times until required\n    number of bytes is read.\n    If EOF is reached before size bytes are read\n    will raise :class:`ClosedConnectionError`\n\n    :param stm: Stream to read bytes from, should have read method,\n                this read method can return less than requested\n                number of bytes.\n    :param size: Number of bytes to read.\n    \"\"\"\n    if size == 0:\n        yield b''\n        return\n\n    res = stm.recv(size)\n    if len(res) == 0:\n        raise ClosedConnectionError()\n    yield res\n    left = size - len(res)\n    while left:\n        buf = stm.recv(left)\n        if len(buf) == 0:\n            raise ClosedConnectionError()\n        yield buf\n        left -= len(buf)",
-                commentText: "Reads exactly size bytes from stm and produces chunks\n\n    May call stm.read multiple times until required\n    number of bytes is read.\n    If EOF is reached before size bytes are read\n    will raise :class:`ClosedConnectionError`\n\n    :param stm: Stream to read bytes from, should have read method,\n                this read method can return less than requested\n                number of bytes.\n    :param size: Number of bytes to read.",
-                codeTokens: [
-                    "def",
-                    "split_phylogeny",
-                    "(",
-                    "p",
-                    ",",
-                    "level",
-                    "=",
-                    "\"s\"",
-                    ")",
-                    ":",
-                    "level",
-                    "=",
-                    "level",
-                    "+",
-                    "\"__\"",
-                    "result",
-                    "=",
-                    "p",
-                    ".",
-                    "split",
-                    "(",
-                    "level",
-                    ")",
-                    "return",
-                    "result",
-                    "[",
-                    "0",
-                    "]",
-                    "+",
-                    "level",
-                    "+",
-                    "result",
-                    "[",
-                    "1",
-                    "]",
-                    ".",
-                    "split",
-                    "(",
-                    "\";\"",
-                    ")",
-                    "[",
-                    "0",
-                    "]"
-                ],
-                commentTokens: [
-                    "Return",
-                    "either",
-                    "the",
-                    "full",
-                    "or",
-                    "truncated",
-                    "version",
-                    "of",
-                    "a",
-                    "QIIME",
-                    "-",
-                    "formatted",
-                    "taxonomy",
-                    "string",
-                    "."
-                ]
+                codeText: "",
+                commentText: "",
+                codeTokens: [],
+                commentTokens: []
             };
 
             return {
@@ -686,7 +627,6 @@
             },
             update() {
                 this.isCanvasLoading = true
-                console.log("taskType", this.taskType)
                 this.saveCookies();
                 if (this.customContentPath != '') {
                     updateCustomProjection(this.contentPath, this.customContentPath, this.currEpoch, this.taskType)
@@ -816,10 +756,57 @@
 
                 window.location.href = url
             },
+
+            // TODO should this be bound to vue this?
+            resolveCurrentIndexAndTokenIndexInGroup(groupId) {
+                const low = groupId === 0 ? 0 : this.commentTokens.length;
+                const high = groupId === 0 ? this.commentTokens.length : this.commentTokens.length + this.codeTokens.length;
+
+                const remapToTokenIndex = (idx) => idx === null ? null : idx - low;
+                const remapToCurrentIndex = (idx) => idx === null ? null : idx + low;
+                const clampFromCurrentIndex = (idx) => idx >= low && idx < high ? idx : null;
+                const clampFromTokenIndex = (idx) => idx >= 0 && idx < high - low ? idx : null;
+
+                return {
+                    to: (idx) => remapToTokenIndex(clampFromCurrentIndex(idx)),
+                    from: (idx) => remapToCurrentIndex(clampFromTokenIndex(idx))
+                };
+            },
             
-            rebindTokensOverview() {
-                console.log('tokens overview is mounted');
-            }
+            rebindTokensOverviewBy(originalText, tokens, resolveCurrentIndexToTokenIndex) {
+                const { to, from } = resolveCurrentIndexToTokenIndex;
+                let unbindCode = () => {};
+                let unwatch = () => {};
+
+                // TODO is necessary here to bind this?
+                const onBind = ((el) => {
+                    generateHighlightedCode(el, originalText, tokens);
+                    unbindCode = registerCodeTokenInteraction(
+                        el,
+                        (revealedIndex) => {
+                            const index = from(revealedIndex);
+                            if (this.plotCanvas) {
+                                updateCurrHoverIndex(undefined, index, false, '', this.plotCanvas.getScreenPositionOfPoint(index));
+                            }
+                        },
+                        (indexChangeCallback) => {
+                            unwatch = this.$watch('curIndex', (newVal) => {
+                                indexChangeCallback(to(newVal));
+                            });
+                        }
+                    );
+                }).bind(this);
+
+                const onUnbind = () => {
+                    unbindCode();
+                    unwatch();
+                };
+
+                return {
+                    bind: onBind,
+                    unbind: onUnbind
+                };
+            },
         },
         watch: {
             playTimeline(newVal, oldVal) {
@@ -880,10 +867,8 @@
                 handler(newVal, oldVal) {
                     if (this.filter_index !== null && this.filter_index !== "" && (!Array.isArray(this.filter_index) || this.filter_index.length !== 0)) {
                         let filter_index = window.vueApp.filter_index.split(',');
-                        console.log("filter_index[newVal]", filter_index[newVal])
                         this.curr_pred = this.prediction_list[filter_index[newVal]];
                     } else {
-                        console.log("newVal", newVal)
                         this.curr_pred = this.prediction_list[newVal];
                     }
                     this.curr_label = this.label_name_dict[this.label_list[newVal]];
@@ -934,8 +919,32 @@
         },
         directives: {
             elementMounted: {
-                mounted(el, binding) {
-                    binding.value(el);
+                bind(el, binding) {
+                    el._handlerBound = false;
+                },
+                inserted(el, binding) {
+                    if (!el._handlerBound) {
+                        binding.value.bind(el);
+                        el._handlerBound = true;
+                    }
+                },
+                // update(el, binding) {
+                //     if (binding.oldValue !== binding.value && el._handlerBound) {
+                //         binding.oldValue.unbind(el);
+                //         el._handlerBound = false;
+                //     }
+                // },
+                // componentUpdated(el, binding) {
+                //     if (!el._handlerBound) {
+                //         binding.value.bind(el);
+                //         el._handlerBound = true;
+                //     }
+                // },
+                unbind(el, binding) {
+                    if (el._handlerBound) {
+                        binding.value.unbind(el);
+                        el._handlerBound = false;
+                    }
                 }
             }
         },
@@ -944,5 +953,6 @@
         }
     })
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/livereload-js/3.1.0/livereload.min.js?host=localhost"></script>
 
 </html>
