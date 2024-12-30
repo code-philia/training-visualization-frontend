@@ -586,12 +586,24 @@ class PlotCanvas {
 
     __updateLastHoveredIndex() {
         let specifiedLastHoveredIndex = makeSpecifiedVariableName('curIndex', '');
-        let specifiedImageSrc = makeSpecifiedVariableName('imageSrc', '');
         let specifiedSelectedIndex = makeSpecifiedVariableName('selectedIndex', '');
         let specifiedHighlightAttributes = makeSpecifiedVariableName('highlightAttributes', '');
 
         updateHoveredIndexSize(this, this.vueApp[specifiedLastHoveredIndex], this.vueApp[specifiedSelectedIndex],
             this.vueApp[specifiedHighlightAttributes].visualizationError, this.vueApp.nnIndices, this.pointsMesh, this.vueApp);
+    }
+
+    __updateIndexOnDown(index) {
+        let specifiedSelectedIndex = makeSpecifiedVariableName('selectedIndex', '');
+
+        if (index !== null && index !== undefined) {
+            if (!this.vueApp[specifiedSelectedIndex].includes(index)) {
+                lockIndex = true;
+                this.vueApp[specifiedSelectedIndex].push(index);
+            } else {
+                this.vueApp[specifiedSelectedIndex] = this.vueApp[specifiedSelectedIndex].filter((value) => value !== index);
+            }
+        }
     }
 
     __addHoverRevealingControl() {
@@ -635,14 +647,7 @@ class PlotCanvas {
             // lockIndex indicates whether the last one or several indices should be deem as hovered
             if (isDown) {
                 // detect if locked to a new point successfully
-                if (index !== null && index !== undefined) {
-                    if (!this.vueApp[specifiedSelectedIndex].includes(index)) {
-                        lockIndex = true;
-                        this.vueApp[specifiedSelectedIndex].push(index);
-                    } else {
-                        this.vueApp[specifiedSelectedIndex] = this.vueApp[specifiedSelectedIndex].filter((value) => value !== index);
-                    }
-                }
+                this.__updateIndexOnDown(index);
             }
 
             this.__updateLastHoveredIndex();
