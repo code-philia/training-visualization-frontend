@@ -105,8 +105,6 @@ body {
     bottom: 0;
     background-color: rgb(244, 244, 244);
     border-top: 1px solid #e1e1e1;
-    flex: 0 0;
-    min-height: 10em;
 }
 .el-checkbox__input.is-checked+.el-checkbox__label{
     color: var(--primary-color);
@@ -297,4 +295,51 @@ pre.highlight {
 
 .el-tabs__header {
     padding: 0 1em;
+}
+
+#footer {
+    display: flex;
+    flex-direction: column;
+}
+
+.footer-tabs {
+    display: flex;
+    flex-direction: column;
+    min-height: 10em;
+    max-height: 20em;
+}
+
+.footer-tabs .el-tabs__content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0;
+}
+
+.footer-tabs .el-tab-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.tokens-overview-content {
+    display: flex; 
+    justify-content: center; 
+    min-height: 0;
+    
+    margin: 0;
+    padding: 0.5em 0;
+}
+
+.tokens-overview-pre {
+    flex: 1;
+    min-width: 0;
+
+    max-width: 40vw;
+    margin: 0.5em;
+    padding: 0.5em;
+    box-sizing: content-box;
+    overflow-y: auto;
 }

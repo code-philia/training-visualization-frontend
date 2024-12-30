@@ -22,6 +22,7 @@
     <script src="/static/render.js"></script>
     <script src="/static/utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
+
 </head>
 
 <body>
@@ -295,16 +296,26 @@
             </div>
         </div>
         <div id="footer">
-            <el-tabs v-model="activeTab">
+            <el-tabs v-model="activeTab" class="footer-tabs">
                 <el-tab-pane label="Timeline" name="timeline">
                     <div style="display: flex; align-items: end;">
                         <svg id="timeLinesvg"></svg>
                         <button id="play-timeline-button" v-if="document.getElementById('timeLinesvg')?.classList?.contains('active')"
                             @mousedown="playTimeline = !playTimeline" :class="playTimeline ? 'pause' : 'play'"/>
                     </div>
-                </el-tab-pane>
-                <el-tab-pane label="Tokens Overview" name="tokens-overview">
-                    
+                </el-tab-pane><!--
+                --><el-tab-pane label="Tokens Overview" name="tokens-overview">
+                    <div class="tokens-overview-content" v-if="codeTokens && codeText && commentTokens && commentText">
+                        <pre class="tokens-overview-pre">
+                            <code>{{ commentText }}</code>
+                        </pre>
+                        <pre class="tokens-overview-pre">
+                            <code>{{ codeText }}</code>
+                        </pre>
+                    </div>
+                    <div v-else>
+                        No valid code and comment.
+                    </div>
                 </el-tab-pane>
             </el-tabs>
         </div>
@@ -332,6 +343,7 @@
     </div>
 </body>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/livereload-js/3.1.0/livereload.min.js?host=localhost"></script>
 <script>
 
     window.vueApp = new Vue({
@@ -348,12 +360,72 @@
                 playTimeline: false,
                 playEvent: undefined,
 
-                activeTab: 'timeline',
+                activeTab: 'tokens-overview',
 
-                codeTokens: undefined,
-                codeText: undefined,
-                commentTokens: undefined,
-                commentText: undefined
+                codeText: "def read_chunks(stm, size):\n    \"\"\" Reads exactly size bytes from stm and produces chunks\n\n    May call stm.read multiple times until required\n    number of bytes is read.\n    If EOF is reached before size bytes are read\n    will raise :class:`ClosedConnectionError`\n\n    :param stm: Stream to read bytes from, should have read method,\n                this read method can return less than requested\n                number of bytes.\n    :param size: Number of bytes to read.\n    \"\"\"\n    if size == 0:\n        yield b''\n        return\n\n    res = stm.recv(size)\n    if len(res) == 0:\n        raise ClosedConnectionError()\n    yield res\n    left = size - len(res)\n    while left:\n        buf = stm.recv(left)\n        if len(buf) == 0:\n            raise ClosedConnectionError()\n        yield buf\n        left -= len(buf)",
+                commentText: "Reads exactly size bytes from stm and produces chunks\n\n    May call stm.read multiple times until required\n    number of bytes is read.\n    If EOF is reached before size bytes are read\n    will raise :class:`ClosedConnectionError`\n\n    :param stm: Stream to read bytes from, should have read method,\n                this read method can return less than requested\n                number of bytes.\n    :param size: Number of bytes to read.",
+                codeTokens: [
+                    "def",
+                    "split_phylogeny",
+                    "(",
+                    "p",
+                    ",",
+                    "level",
+                    "=",
+                    "\"s\"",
+                    ")",
+                    ":",
+                    "level",
+                    "=",
+                    "level",
+                    "+",
+                    "\"__\"",
+                    "result",
+                    "=",
+                    "p",
+                    ".",
+                    "split",
+                    "(",
+                    "level",
+                    ")",
+                    "return",
+                    "result",
+                    "[",
+                    "0",
+                    "]",
+                    "+",
+                    "level",
+                    "+",
+                    "result",
+                    "[",
+                    "1",
+                    "]",
+                    ".",
+                    "split",
+                    "(",
+                    "\";\"",
+                    ")",
+                    "[",
+                    "0",
+                    "]"
+                ],
+                commentTokens: [
+                    "Return",
+                    "either",
+                    "the",
+                    "full",
+                    "or",
+                    "truncated",
+                    "version",
+                    "of",
+                    "a",
+                    "QIIME",
+                    "-",
+                    "formatted",
+                    "taxonomy",
+                    "string",
+                    "."
+                ]
             };
 
             return {
@@ -743,6 +815,10 @@
                 this.resetData();
 
                 window.location.href = url
+            },
+            
+            rebindTokensOverview() {
+                console.log('tokens overview is mounted');
             }
         },
         watch: {
@@ -853,6 +929,13 @@
                     } else {
                         this.showColorSetting = false
                     }
+                }
+            }
+        },
+        directives: {
+            elementMounted: {
+                mounted(el, binding) {
+                    binding.value(el);
                 }
             }
         },
